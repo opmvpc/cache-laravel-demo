@@ -14,7 +14,7 @@
         <header class="border-b border-slate-800 bg-slate-950/70 backdrop-blur">
             <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
                 <div class="flex items-center gap-3">
-                    <div class="h-9 w-9 rounded-lg bg-indigo-500/15 ring-1 ring-indigo-400/30"></div>
+                    <div class="grid h-9 w-9 place-items-center rounded-lg bg-indigo-500/15 text-lg ring-1 ring-indigo-400/30">🗄️</div>
                     <div>
                         <div class="text-lg font-semibold leading-tight">Laravel Cache Benchmark</div>
                         <div class="text-xs text-slate-400">Drivers, SQL, Fibonacci, data size</div>
@@ -38,4 +38,3 @@
         </footer>
     </body>
 </html>
-

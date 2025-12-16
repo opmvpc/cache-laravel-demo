@@ -11,7 +11,8 @@ Small Laravel app to **benchmark and compare caching strategies**:
 
 - PHP 8.2+
 - A database (SQLite works for local dev; MySQL is fine too)
-- Redis (optional, only for the Redis benchmark)
+- Redis server (optional, only for the Redis benchmark)
+- Redis PHP client: uses `predis/predis` (no `phpredis` extension required)
 
 ## Setup
 
@@ -47,9 +48,14 @@ Endpoints (AJAX):
 - `POST /benchmark/sql`
 - `POST /benchmark/fibonacci`
 - `POST /benchmark/datasize`
-- `POST /benchmark/all`
+- Streaming (SSE): `GET /benchmark/stream/*`
 
 Exports (last run stored in file cache):
 
 - `GET /export/json/{benchmark}`
 - `GET /export/csv/{benchmark}`
+
+## Notes
+
+- `Dataset size (SQL)` n'ajoute pas de données: ça **filtre** les requêtes SQL sur ~N articles. Pour comparer `100/1k/10k/50k`, seed au moins autant d'articles.
+- `memory_kb` est le **delta de heap PHP** observé pendant l'opération. Ça ne reflète pas la mémoire utilisée côté Redis/MySQL (process séparés).

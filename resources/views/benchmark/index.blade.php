@@ -21,6 +21,7 @@
                                 </label>
                             @endforeach
                         </div>
+                        <div class="mt-2 text-xs text-slate-500">Filtre les requêtes SQL sur ~N articles. Pour tester 10k/50k, seed au moins autant via <a class="underline hover:text-slate-300" href="{{ route('seed.index') }}">/seed</a>.</div>
                     </div>
                 </div>
             </div>
@@ -46,7 +47,7 @@
                     </div>
                     <button data-run="sql" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400">Lancer</button>
                 </div>
-                <div class="mt-4 text-xs text-slate-500">Variants: simple, relations, aggregations, complex</div>
+                <div class="mt-4 text-xs text-slate-500">Compare file/database/redis • cached_miss = 1er appel (cache vide) • cached_hit = cache rempli • Variants: simple, relations, aggregations, complex</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
@@ -79,17 +80,16 @@
             </div>
         </div>
 
-        <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <div class="text-base font-semibold">▶️ Tout lancer</div>
-                    <div class="text-sm text-slate-400">Exécute les 4 catégories (SQL avec itérations réduites).</div>
-                </div>
-                <button data-run="all" class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400">Lancer TOUS les benchmarks</button>
+        <div id="status" class="hidden rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm"></div>
+        <div id="progressWrap" class="hidden rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <div class="mb-2 flex items-center justify-between text-xs text-slate-400">
+                <div id="progressMsg">—</div>
+                <div id="progressPct">0%</div>
+            </div>
+            <div class="h-3 w-full overflow-hidden rounded-full bg-slate-950 ring-1 ring-slate-800">
+                <div id="progressBar" class="h-3 w-0 bg-indigo-500"></div>
             </div>
         </div>
-
-        <div id="status" class="hidden rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm"></div>
 
         <div class="grid gap-6">
             <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
@@ -99,10 +99,15 @@
                 </div>
                 <div class="mt-4 grid gap-6">
                     <div>
-                        <div class="mb-2 text-sm font-semibold text-slate-200">Graphiques</div>
+                        <div class="mb-1 text-sm font-semibold text-slate-200" id="resultTitle">Graphiques</div>
+                        <div class="mb-3 text-xs text-slate-500" id="resultDesc">Lance un benchmark pour afficher les résultats.</div>
                         <div class="grid gap-4 md:grid-cols-2">
-                            <canvas id="chartA" height="140"></canvas>
-                            <canvas id="chartB" height="140"></canvas>
+                            <div class="relative h-72 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                <canvas id="chartA" class="h-full w-full" style="max-width: 100%;"></canvas>
+                            </div>
+                            <div class="relative h-72 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                <canvas id="chartB" class="h-full w-full" style="max-width: 100%;"></canvas>
+                            </div>
                         </div>
                     </div>
                     <div>
@@ -117,11 +122,18 @@
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const statusEl = document.getElementById('status');
+        const progressWrap = document.getElementById('progressWrap');
+        const progressBar = document.getElementById('progressBar');
+        const progressPct = document.getElementById('progressPct');
+        const progressMsg = document.getElementById('progressMsg');
+        const resultTitleEl = document.getElementById('resultTitle');
+        const resultDescEl = document.getElementById('resultDesc');
         const detailsEl = document.getElementById('details');
         const exportsEl = document.getElementById('exports');
 
         let chartA = null;
         let chartB = null;
+        let source = null;
 
         function getConfig() {
             const iterations = parseInt(document.getElementById('iterations').value || '100', 10);
@@ -138,11 +150,22 @@
             statusEl.textContent = message;
         }
 
+        function setProgress(percent, message) {
+            progressWrap.classList.remove('hidden');
+            progressBar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+            progressPct.textContent = Math.max(0, Math.min(100, percent)) + '%';
+            progressMsg.textContent = message || '...';
+        }
+
         function clearUi() {
             detailsEl.innerHTML = '';
             exportsEl.innerHTML = '';
+            resultTitleEl.textContent = 'Graphiques';
+            resultDescEl.textContent = 'Lance un benchmark pour afficher les résultats.';
             if (chartA) { chartA.destroy(); chartA = null; }
             if (chartB) { chartB.destroy(); chartB = null; }
+            if (source) { source.close(); source = null; }
+            progressWrap.classList.add('hidden');
         }
 
         async function postJson(url, body) {
@@ -198,6 +221,8 @@
 
         function renderDrivers(payload) {
             exportsEl.innerHTML = linkExport('cache_drivers');
+            resultTitleEl.textContent = 'Résultats : Cache Drivers';
+            resultDescEl.textContent = 'Compare file/database/redis sur put/get(hit)/get(miss)/forget/remember/flush (ms). Le graphe de droite montre l’empreinte du cache (store_kb): file=taille fichier, database=LENGTH(value), redis=MEMORY USAGE.';
 
             const drivers = Object.keys(payload.results || {});
             const ops = ['put', 'get_hit', 'get_miss', 'forget', 'remember', 'flush'];
@@ -208,7 +233,16 @@
                 for (const d of drivers) row.push(payload.results?.[d]?.[op]?.avg ?? payload.results?.[d]?.error ?? 'n/a');
                 rows.push(row);
             }
-            detailsEl.innerHTML = renderTable(rows);
+            const explanation = `
+                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+                    <div class="font-semibold text-slate-200">Ce qui est mesuré</div>
+                    <div class="mt-1 text-slate-400">
+                        <div>• Chaque opération est répétée N fois (itérations) et on calcule min/max/moyenne/écart-type.</div>
+                        <div>• Le graphique de droite (<span class="font-mono">store_kb</span>) est l’empreinte dans le store: file=taille du fichier, database=LENGTH(value), redis=MEMORY USAGE.</div>
+                    </div>
+                </div>
+            `;
+            detailsEl.innerHTML = explanation + renderTable(rows);
 
             const datasets = drivers.map((d, i) => ({
                 label: d,
@@ -220,6 +254,7 @@
                 data: { labels: ops, datasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -230,7 +265,7 @@
 
             const memDatasets = drivers.map(d => ({
                 label: d,
-                data: ops.map(op => payload.results?.[d]?.[op]?.memory_kb ?? null),
+                data: ops.map(op => payload.results?.[d]?.[op]?.store_kb ?? payload.results?.[d]?.[op]?.memory_kb ?? null),
             }));
 
             chartB = new Chart(document.getElementById('chartB'), {
@@ -238,10 +273,11 @@
                 data: { labels: ops, datasets: memDatasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'memory (KB)', color: '#94a3b8' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'cache footprint (KB)', color: '#94a3b8' } },
                     },
                 }
             });
@@ -249,27 +285,58 @@
 
         function renderSql(payload) {
             exportsEl.innerHTML = linkExport('sql_queries');
+            resultTitleEl.textContent = 'Résultats : SQL Queries';
+            resultDescEl.textContent = 'Compare no-cache (direct) vs cache stores (file/database/redis) en miss/hit. Speedup (x) = direct / cached_hit.';
 
             const variants = payload.results?.variants || {};
             const names = Object.keys(variants);
-            const modes = ['direct', 'cached_miss', 'cached_hit'];
+            const stores = payload.results?.cache_stores || ['file', 'database', 'redis'];
 
-            const rows = [['variant', ...modes]];
+            const rows = [
+                ['variant', 'direct_avg_ms',
+                    ...stores.flatMap(s => [`${s}_hit_ms`, `${s}_speedup_x`]),
+                    ...stores.map(s => `${s}_miss_ms`),
+                ],
+            ];
+
             for (const name of names) {
-                rows.push([name, ...modes.map(m => variants[name]?.[m]?.avg ?? 'n/a')]);
-            }
-            detailsEl.innerHTML = renderTable(rows);
+                const direct = variants[name]?.direct?.avg ?? null;
 
-            const datasets = modes.map(mode => ({
-                label: mode,
-                data: names.map(n => variants[n]?.[mode]?.avg ?? null),
-            }));
+                const hitCells = stores.flatMap(s => {
+                    const hit = variants[name]?.stores?.[s]?.cached_hit?.avg ?? null;
+                    const speedup = (direct && hit) ? (direct / hit) : null;
+                    return [hit ?? 'n/a', speedup ? speedup.toFixed(2) : 'n/a'];
+                });
+
+                const missCells = stores.map(s => variants[name]?.stores?.[s]?.cached_miss?.avg ?? 'n/a');
+
+                rows.push([name, direct ?? 'n/a', ...hitCells, ...missCells]);
+            }
+
+            const explanation = `
+                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+                    <div class="font-semibold text-slate-200">Comment lire ce benchmark</div>
+                    <div class="mt-1 text-slate-400">
+                        <div>• <span class="font-mono">direct</span> = requête SQL exécutée à chaque itération (baseline).</div>
+                        <div>• <span class="font-mono">cached_miss</span> = 1er <span class="font-mono">remember()</span> (cache vide) → requête + écriture en cache.</div>
+                        <div>• <span class="font-mono">cached_hit</span> = cache rempli → lecture depuis le store (file/database/redis), sans requête.</div>
+                        <div>• <span class="font-mono">speedup_x</span> = <span class="font-mono">direct_avg_ms / cached_hit_ms</span> (plus grand = mieux).</div>
+                    </div>
+                </div>
+            `;
+            detailsEl.innerHTML = explanation + renderTable(rows);
+
+            const datasets = [
+                { label: 'direct', data: names.map(n => variants[n]?.direct?.avg ?? null) },
+                ...stores.map(s => ({ label: `${s}_hit`, data: names.map(n => variants[n]?.stores?.[s]?.cached_hit?.avg ?? null) })),
+            ];
 
             chartA = new Chart(document.getElementById('chartA'), {
                 type: 'bar',
                 data: { labels: names, datasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -278,20 +345,25 @@
                 }
             });
 
-            const memDatasets = modes.map(mode => ({
-                label: mode,
-                data: names.map(n => variants[n]?.[mode]?.memory_kb ?? null),
+            const speedupDatasets = stores.map(s => ({
+                label: `${s}_hit`,
+                data: names.map(n => {
+                    const direct = variants[n]?.direct?.avg ?? null;
+                    const hit = variants[n]?.stores?.[s]?.cached_hit?.avg ?? null;
+                    return (direct && hit) ? (direct / hit) : null;
+                }),
             }));
 
             chartB = new Chart(document.getElementById('chartB'), {
                 type: 'bar',
-                data: { labels: names, datasets: memDatasets },
+                data: { labels: names, datasets: speedupDatasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'memory (KB)', color: '#94a3b8' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'speedup vs direct (x)', color: '#94a3b8' } },
                     },
                 }
             });
@@ -299,6 +371,8 @@
 
         function renderFibonacci(payload) {
             exportsEl.innerHTML = linkExport('fibonacci');
+            resultTitleEl.textContent = 'Résultats : Fibonacci';
+            resultDescEl.textContent = 'Compare naive (O(2^n)), memoized (O(n)), iterative (O(n)). Le graphe de droite montre le nombre d’appels récursifs.';
 
             const cases = payload.results?.cases || [];
             const labels = cases.map(c => `fib(${c.n})`);
@@ -317,7 +391,16 @@
                     c.iterative?.calls ?? '',
                 ]);
             }
-            detailsEl.innerHTML = renderTable(rows);
+            const explanation = `
+                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+                    <div class="font-semibold text-slate-200">Idée pédagogique</div>
+                    <div class="mt-1 text-slate-400">
+                        <div>• Naive explose en nombre d’appels (≈ 2^n) → très lent.</div>
+                        <div>• Mémoïsation évite de recalculer les sous-problèmes → beaucoup moins d’appels.</div>
+                    </div>
+                </div>
+            `;
+            detailsEl.innerHTML = explanation + renderTable(rows);
 
             const datasets = methods.map(method => ({
                 label: method,
@@ -330,6 +413,7 @@
                 data: { labels, datasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -349,6 +433,7 @@
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'n', color: '#94a3b8' } },
@@ -360,6 +445,8 @@
 
         function renderDataSize(payload) {
             exportsEl.innerHTML = linkExport('data_size');
+            resultTitleEl.textContent = 'Résultats : Data Size';
+            resultDescEl.textContent = 'Mesure put/get pour 1KB → 1MB sur le store choisi (ms + delta de heap PHP).';
 
             const results = payload.results?.results || {};
             const sizes = Object.keys(results);
@@ -369,7 +456,16 @@
             for (const s of sizes) {
                 rows.push([s, results[s]?.bytes ?? '', results[s]?.put?.avg ?? 'n/a', results[s]?.get?.avg ?? 'n/a']);
             }
-            detailsEl.innerHTML = renderTable(rows);
+            const explanation = `
+                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+                    <div class="font-semibold text-slate-200">Ce qui change ici</div>
+                    <div class="mt-1 text-slate-400">
+                        <div>• Même code, même store → seule la taille de la donnée (1KB → 1MB) varie.</div>
+                        <div>• Utile pour visualiser l’impact de la sérialisation + I/O réseau/disque.</div>
+                    </div>
+                </div>
+            `;
+            detailsEl.innerHTML = explanation + renderTable(rows);
 
             const datasets = ops.map(op => ({
                 label: op,
@@ -381,6 +477,7 @@
                 data: { labels: sizes, datasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -399,45 +496,83 @@
                 data: { labels: sizes, datasets: memDatasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'memory (KB)', color: '#94a3b8' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'PHP heap Δ (KB)', color: '#94a3b8' } },
                     },
                 }
             });
         }
 
-        function renderAll(payload) {
-            exportsEl.innerHTML = linkExport('all');
-            const rows = [['benchmark', 'note']];
-            for (const key of Object.keys(payload.results || {})) {
-                rows.push([key, 'See /export/json/all']);
-            }
-            detailsEl.innerHTML = renderTable(rows);
+        function stream(url, onResult) {
+            if (source) source.close();
+            setProgress(0, 'Connecting...');
+
+            source = new EventSource(url);
+            source.addEventListener('progress', (e) => {
+                const p = JSON.parse(e.data || '{}');
+                setProgress(p.percent ?? 0, p.message ?? '...');
+            });
+            source.addEventListener('result', (e) => {
+                const payload = JSON.parse(e.data || '{}');
+                source.close();
+                source = null;
+                onResult(payload);
+            });
+            source.addEventListener('server_error', (e) => {
+                const data = JSON.parse(e.data || '{}');
+                setStatus(data.message || 'Erreur', 'error');
+                source.close();
+                source = null;
+            });
+            source.onerror = () => {
+                // connection errors also come here; keep UI message from server_error if any
+            };
         }
 
-        async function run(kind) {
+        function run(kind) {
             const cfg = getConfig();
             clearUi();
             setStatus('Benchmark en cours...');
 
             try {
-                let payload = null;
+                if (kind === 'drivers') {
+                    stream(`{{ route('benchmark.stream.drivers') }}?iterations=${encodeURIComponent(cfg.iterations)}`, (payload) => {
+                        setStatus(`OK • ${payload.benchmark} • ${payload.timestamp}`);
+                        renderDrivers(payload);
+                    });
+                }
+                if (kind === 'sql') {
+                    const it = Math.min(250, cfg.iterations);
+                    stream(`{{ route('benchmark.stream.sql') }}?iterations=${encodeURIComponent(it)}&dataset_size=${encodeURIComponent(cfg.datasetSize)}`, (payload) => {
+                        const dbCount = payload?.results?.db_article_count ?? null;
+                        const eff = payload?.results?.effective_dataset_size ?? null;
+                        const requested = payload?.config?.dataset_size ?? cfg.datasetSize;
 
-                if (kind === 'drivers') payload = await postJson('{{ route('benchmark.drivers') }}', { iterations: cfg.iterations });
-                if (kind === 'sql') payload = await postJson('{{ route('benchmark.sql') }}', { iterations: Math.min(250, cfg.iterations), dataset_size: cfg.datasetSize });
-                if (kind === 'fibonacci') payload = await postJson('{{ route('benchmark.fibonacci') }}', {});
-                if (kind === 'datasize') payload = await postJson('{{ route('benchmark.datasize') }}', { iterations: cfg.iterations, driver: cfg.dataSizeDriver });
-                if (kind === 'all') payload = await postJson('{{ route('benchmark.all') }}', { iterations: cfg.iterations, dataset_size: cfg.datasetSize });
-
-                setStatus(`OK • ${payload.benchmark} • ${payload.timestamp}`);
-
-                if (kind === 'drivers') renderDrivers(payload);
-                if (kind === 'sql') renderSql(payload);
-                if (kind === 'fibonacci') renderFibonacci(payload);
-                if (kind === 'datasize') renderDataSize(payload);
-                if (kind === 'all') renderAll(payload);
+                        if (dbCount !== null && eff !== null && dbCount < requested) {
+                            setStatus(`OK • ${payload.benchmark} • ${payload.timestamp} • ⚠️ dataset=${eff} (DB=${dbCount}, demandé=${requested} → seed plus)`);
+                        } else if (dbCount !== null && eff !== null) {
+                            setStatus(`OK • ${payload.benchmark} • ${payload.timestamp} • dataset=${eff} (DB=${dbCount})`);
+                        } else {
+                            setStatus(`OK • ${payload.benchmark} • ${payload.timestamp}`);
+                        }
+                        renderSql(payload);
+                    });
+                }
+                if (kind === 'fibonacci') {
+                    stream(`{{ route('benchmark.stream.fibonacci') }}`, (payload) => {
+                        setStatus(`OK • ${payload.benchmark} • ${payload.timestamp}`);
+                        renderFibonacci(payload);
+                    });
+                }
+                if (kind === 'datasize') {
+                    stream(`{{ route('benchmark.stream.datasize') }}?iterations=${encodeURIComponent(cfg.iterations)}&driver=${encodeURIComponent(cfg.dataSizeDriver)}`, (payload) => {
+                        setStatus(`OK • ${payload.benchmark} • ${payload.timestamp}`);
+                        renderDataSize(payload);
+                    });
+                }
             } catch (e) {
                 setStatus(e.message || 'Erreur', 'error');
             }

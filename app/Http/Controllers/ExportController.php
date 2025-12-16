@@ -73,28 +73,55 @@ class ExportController extends Controller
         }
 
         if ($benchmark === 'sql_queries') {
-            $rows = [['variant', 'mode', 'min_ms', 'max_ms', 'avg_ms', 'std_dev_ms', 'memory_kb', 'iterations']];
+            $rows = [['variant', 'cache_store', 'mode', 'min_ms', 'max_ms', 'avg_ms', 'std_dev_ms', 'memory_kb', 'iterations']];
             $variants = $payload['results']['variants'] ?? [];
 
-            foreach ($variants as $variant => $modes) {
-                if (! is_array($modes)) {
+            foreach ($variants as $variant => $data) {
+                if (! is_array($data)) {
                     continue;
                 }
-                foreach (['direct', 'cached_miss', 'cached_hit'] as $mode) {
-                    $stats = $modes[$mode] ?? null;
-                    if (! is_array($stats) || ! isset($stats['avg'])) {
-                        continue;
-                    }
+
+                $direct = $data['direct'] ?? null;
+                if (is_array($direct) && isset($direct['avg'])) {
                     $rows[] = [
                         $variant,
-                        $mode,
-                        $stats['min'] ?? null,
-                        $stats['max'] ?? null,
-                        $stats['avg'] ?? null,
-                        $stats['std_dev'] ?? null,
-                        $stats['memory_kb'] ?? null,
-                        $stats['iterations'] ?? null,
+                        'no-cache',
+                        'direct',
+                        $direct['min'] ?? null,
+                        $direct['max'] ?? null,
+                        $direct['avg'] ?? null,
+                        $direct['std_dev'] ?? null,
+                        $direct['memory_kb'] ?? null,
+                        $direct['iterations'] ?? null,
                     ];
+                }
+
+                $stores = $data['stores'] ?? [];
+                if (! is_array($stores)) {
+                    continue;
+                }
+
+                foreach ($stores as $store => $modes) {
+                    if (! is_array($modes)) {
+                        continue;
+                    }
+                    foreach (['cached_miss', 'cached_hit'] as $mode) {
+                        $stats = $modes[$mode] ?? null;
+                        if (! is_array($stats) || ! isset($stats['avg'])) {
+                            continue;
+                        }
+                        $rows[] = [
+                            $variant,
+                            $store,
+                            $mode,
+                            $stats['min'] ?? null,
+                            $stats['max'] ?? null,
+                            $stats['avg'] ?? null,
+                            $stats['std_dev'] ?? null,
+                            $stats['memory_kb'] ?? null,
+                            $stats['iterations'] ?? null,
+                        ];
+                    }
                 }
             }
 

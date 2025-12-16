@@ -11,12 +11,19 @@ class FibonacciBenchmark
     }
 
     /**
+     * @param  null|callable(array<string, mixed> $progress): void  $onProgress
      * @return array{cases: array<int, array<string, mixed>>}
      */
-    public function run(): array
+    public function run(?callable $onProgress = null): array
     {
         $ns = [10, 20, 30, 35, 40];
         $cases = [];
+
+        $total = 0;
+        foreach ($ns as $n) {
+            $total += ($n <= 35) ? 3 : 2;
+        }
+        $done = 0;
 
         foreach ($ns as $n) {
             $naiveCalls = 0;
@@ -34,8 +41,20 @@ class FibonacciBenchmark
                         $naive = $this->fibNaive($n, $naiveCalls);
                     },
                     iterations: 1,
-                    warmup: 0
+                    warmup: 0,
+                    onProgress: $onProgress ? function (int $opDone, int $opTotal) use (&$done, $total, $n, $onProgress) {
+                        $percent = $total > 0 ? (int) floor((($done + $opDone) / $total) * 100) : 0;
+                        $onProgress([
+                            'done' => $done + $opDone,
+                            'total' => $total,
+                            'percent' => min(100, $percent),
+                            'n' => $n,
+                            'method' => 'naive',
+                            'message' => "fib({$n}) • naive",
+                        ]);
+                    } : null,
                 );
+                $done++;
             }
 
             $memoResult = $this->runner->run(
@@ -44,16 +63,40 @@ class FibonacciBenchmark
                     $memo = $this->fibMemoized($n, $memoCalls);
                 },
                 iterations: 1,
-                warmup: 0
+                warmup: 0,
+                onProgress: $onProgress ? function (int $opDone, int $opTotal) use (&$done, $total, $n, $onProgress) {
+                    $percent = $total > 0 ? (int) floor((($done + $opDone) / $total) * 100) : 0;
+                    $onProgress([
+                        'done' => $done + $opDone,
+                        'total' => $total,
+                        'percent' => min(100, $percent),
+                        'n' => $n,
+                        'method' => 'memoized',
+                        'message' => "fib({$n}) • memoized",
+                    ]);
+                } : null,
             );
+            $done++;
 
             $iterResult = $this->runner->run(
                 operation: function () use ($n, &$iter) {
                     $iter = $this->fibIterative($n);
                 },
                 iterations: 1,
-                warmup: 0
+                warmup: 0,
+                onProgress: $onProgress ? function (int $opDone, int $opTotal) use (&$done, $total, $n, $onProgress) {
+                    $percent = $total > 0 ? (int) floor((($done + $opDone) / $total) * 100) : 0;
+                    $onProgress([
+                        'done' => $done + $opDone,
+                        'total' => $total,
+                        'percent' => min(100, $percent),
+                        'n' => $n,
+                        'method' => 'iterative',
+                        'message' => "fib({$n}) • iterative",
+                    ]);
+                } : null,
             );
+            $done++;
 
             if ($naive !== null && $memo !== null && $naive !== $memo) {
                 throw new RuntimeException("fibNaive and fibMemoized mismatch for n={$n}");
@@ -135,4 +178,3 @@ class FibonacciBenchmark
         return $b;
     }
 }
-

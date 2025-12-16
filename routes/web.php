@@ -12,13 +12,18 @@ Route::prefix('benchmark')->group(function () {
     Route::post('/sql', [BenchmarkController::class, 'runSql'])->name('benchmark.sql');
     Route::post('/fibonacci', [BenchmarkController::class, 'runFibonacci'])->name('benchmark.fibonacci');
     Route::post('/datasize', [BenchmarkController::class, 'runDataSize'])->name('benchmark.datasize');
-    Route::post('/all', [BenchmarkController::class, 'runAll'])->name('benchmark.all');
+
+    Route::get('/stream/drivers', [BenchmarkController::class, 'streamDrivers'])->name('benchmark.stream.drivers');
+    Route::get('/stream/sql', [BenchmarkController::class, 'streamSql'])->name('benchmark.stream.sql');
+    Route::get('/stream/fibonacci', [BenchmarkController::class, 'streamFibonacci'])->name('benchmark.stream.fibonacci');
+    Route::get('/stream/datasize', [BenchmarkController::class, 'streamDataSize'])->name('benchmark.stream.datasize');
 });
 
 Route::prefix('seed')->group(function () {
     Route::get('/', [SeederController::class, 'index'])->name('seed.index');
     Route::post('/', [SeederController::class, 'run'])->name('seed.run');
     Route::get('/status', [SeederController::class, 'status'])->name('seed.status');
+    Route::get('/stream', [SeederController::class, 'stream'])->name('seed.stream');
 });
 
 Route::prefix('export')->group(function () {

@@ -31,13 +31,13 @@ test('sql benchmark runs with seeded data', function () {
         ->assertJsonPath('benchmark', 'sql_queries')
         ->assertJsonStructure([
             'results' => [
+                'cache_stores',
                 'variants' => [
-                    'simple' => ['direct', 'cached_miss', 'cached_hit'],
-                    'relations' => ['direct', 'cached_miss', 'cached_hit'],
-                    'aggregations' => ['direct', 'cached_miss', 'cached_hit'],
-                    'complex' => ['direct', 'cached_miss', 'cached_hit'],
+                    'simple' => ['direct', 'stores' => ['database' => ['cached_miss', 'cached_hit']]],
+                    'relations' => ['direct', 'stores' => ['database' => ['cached_miss', 'cached_hit']]],
+                    'aggregations' => ['direct', 'stores' => ['database' => ['cached_miss', 'cached_hit']]],
+                    'complex' => ['direct', 'stores' => ['database' => ['cached_miss', 'cached_hit']]],
                 ],
             ],
         ]);
 });
-

@@ -9,14 +9,15 @@ class BenchmarkResult
         public readonly float $max,
         public readonly float $avg,
         public readonly float $stdDev,
-        public readonly int $memoryKb,
+        public readonly float $memoryKb,
+        public readonly int $memoryBytes,
         public readonly int $iterations,
         public readonly string $unit = 'ms',
     ) {
     }
 
     /**
-     * @return array{min: float, max: float, avg: float, std_dev: float, memory_kb: int, iterations: int, unit: string}
+     * @return array{min: float, max: float, avg: float, std_dev: float, memory_kb: float, memory_bytes: int, iterations: int, unit: string}
      */
     public function toArray(): array
     {
@@ -26,9 +27,9 @@ class BenchmarkResult
             'avg' => $this->avg,
             'std_dev' => $this->stdDev,
             'memory_kb' => $this->memoryKb,
+            'memory_bytes' => $this->memoryBytes,
             'iterations' => $this->iterations,
             'unit' => $this->unit,
         ];
     }
 }
-
