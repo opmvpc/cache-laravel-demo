@@ -97,24 +97,24 @@
                     <div class="text-base font-semibold">Résultats</div>
                     <div id="exports" class="flex flex-wrap gap-2 text-xs"></div>
                 </div>
-                <div class="mt-4 grid gap-6">
-                    <div>
+	                <div class="mt-4 grid gap-6">
+	                    <div class="min-w-0">
                         <div class="mb-1 text-sm font-semibold text-slate-200" id="resultTitle">Graphiques</div>
                         <div class="mb-3 text-xs text-slate-500" id="resultDesc">Lance un benchmark pour afficher les résultats.</div>
-	                        <div id="chartsGrid" class="grid gap-4 md:grid-cols-2">
-		                            <div id="chartAWrap" class="relative flex h-80 w-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
-		                                <div id="chartATitle" class="mb-2 text-xs font-semibold text-slate-200"></div>
-		                                <canvas id="chartA" class="w-full flex-1" style="max-width: 100%; min-height: 0;"></canvas>
-		                            </div>
-		                            <div id="chartBWrap" class="relative flex h-80 w-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
-		                                <div id="chartBTitle" class="mb-2 text-xs font-semibold text-slate-200"></div>
-		                                <canvas id="chartB" class="w-full flex-1" style="max-width: 100%; min-height: 0;"></canvas>
-		                            </div>
-	                        </div>
+		                        <div id="chartsGrid" class="grid w-full min-w-0 gap-4 md:grid-cols-2">
+			                            <div id="chartAWrap" class="relative flex h-80 w-full min-w-0 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
+			                                <div id="chartATitle" class="mb-2 text-xs font-semibold text-slate-200"></div>
+			                                <canvas id="chartA" class="w-full flex-1" style="max-width: 100%; min-height: 0;"></canvas>
+			                            </div>
+			                            <div id="chartBWrap" class="relative flex h-80 w-full min-w-0 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
+			                                <div id="chartBTitle" class="mb-2 text-xs font-semibold text-slate-200"></div>
+			                                <canvas id="chartB" class="w-full flex-1" style="max-width: 100%; min-height: 0;"></canvas>
+			                            </div>
+		                        </div>
                     </div>
-                    <div>
+	                    <div class="min-w-0">
                         <div class="mb-2 text-sm font-semibold text-slate-200">Détails</div>
-                        <div id="details" class="overflow-x-auto text-sm text-slate-200"></div>
+	                        <div id="details" class="w-full min-w-0 overflow-x-auto text-sm text-slate-200"></div>
                     </div>
                 </div>
             </div>
@@ -175,9 +175,7 @@
 		            progressWrap.classList.add('hidden');
 		            if (chartATitleEl) chartATitleEl.textContent = '';
 		            if (chartBTitleEl) chartBTitleEl.textContent = '';
-		            if (chartsGridEl) chartsGridEl.className = 'grid gap-4 md:grid-cols-2';
-		            if (chartAWrapEl) chartAWrapEl.classList.remove('max-w-5xl');
-		            if (chartBWrapEl) chartBWrapEl.classList.remove('max-w-5xl');
+		            if (chartsGridEl) chartsGridEl.className = 'grid w-full min-w-0 gap-4 md:grid-cols-2';
 		        }
 
         async function postJson(url, body) {
@@ -317,9 +315,7 @@
 	            if (chartBTitleEl) chartBTitleEl.textContent = 'Speedup vs direct (x): direct / cached_hit';
             resultTitleEl.textContent = 'Résultats : SQL Queries';
             resultDescEl.textContent = 'Compare no-cache (direct) vs cache stores (file/database/redis) en miss/hit. Speedup (x) = direct / cached_hit.';
-	            if (chartsGridEl) chartsGridEl.className = 'grid gap-4 justify-items-center';
-	            if (chartAWrapEl) chartAWrapEl.classList.add('max-w-5xl');
-	            if (chartBWrapEl) chartBWrapEl.classList.add('max-w-5xl');
+		            if (chartsGridEl) chartsGridEl.className = 'grid w-full min-w-0 gap-4 md:grid-cols-1';
 
 	            const variants = payload.results?.variants || {};
 	            const names = Object.keys(variants);

@@ -7,10 +7,13 @@
 
         <title>{{ $title ?? config('app.name', 'Cache Benchmark') }}</title>
 
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    </head>
-	    <body class="bg-slate-950 text-slate-100 overflow-y-scroll overflow-x-hidden">
+	        <script src="https://cdn.tailwindcss.com"></script>
+	        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+	        <style>
+	            html { scrollbar-gutter: stable; }
+	        </style>
+	    </head>
+	    <body class="bg-slate-950 text-slate-100">
         <header class="border-b border-slate-800 bg-slate-950/70 backdrop-blur">
             <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
                 <div class="flex items-center gap-3">
