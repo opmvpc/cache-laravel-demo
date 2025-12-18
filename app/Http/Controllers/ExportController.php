@@ -73,7 +73,7 @@ class ExportController extends Controller
         }
 
         if ($benchmark === 'sql_queries') {
-            $rows = [['variant', 'cache_store', 'mode', 'min_ms', 'max_ms', 'avg_ms', 'std_dev_ms', 'memory_kb', 'iterations']];
+            $rows = [['variant', 'cache_store', 'mode', 'min_ms', 'max_ms', 'avg_ms', 'std_dev_ms', 'memory_kb', 'iterations', 'db_queries']];
             $variants = $payload['results']['variants'] ?? [];
 
             foreach ($variants as $variant => $data) {
@@ -93,6 +93,7 @@ class ExportController extends Controller
                         $direct['std_dev'] ?? null,
                         $direct['memory_kb'] ?? null,
                         $direct['iterations'] ?? null,
+                        $direct['db_queries'] ?? null,
                     ];
                 }
 
@@ -120,6 +121,7 @@ class ExportController extends Controller
                             $stats['std_dev'] ?? null,
                             $stats['memory_kb'] ?? null,
                             $stats['iterations'] ?? null,
+                            $stats['db_queries'] ?? null,
                         ];
                     }
                 }

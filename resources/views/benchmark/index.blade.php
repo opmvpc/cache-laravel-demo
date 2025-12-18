@@ -12,7 +12,7 @@
                         <input id="iterations" type="number" min="1" max="5000" value="{{ $defaultIterations }}" class="w-40 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-indigo-400" />
                     </label>
                     <div>
-                        <div class="mb-1 text-xs text-slate-400">Dataset size (SQL)</div>
+	                        <div class="mb-1 text-xs text-slate-400">Dataset size (SQL limit)</div>
                         <div class="flex flex-wrap gap-2">
                             @foreach ([100, 1000, 10000, 50000] as $size)
                                 <label class="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
@@ -101,14 +101,16 @@
                     <div>
                         <div class="mb-1 text-sm font-semibold text-slate-200" id="resultTitle">Graphiques</div>
                         <div class="mb-3 text-xs text-slate-500" id="resultDesc">Lance un benchmark pour afficher les résultats.</div>
-                        <div class="grid gap-4 md:grid-cols-2">
-                            <div class="relative h-72 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
-                                <canvas id="chartA" class="h-full w-full" style="max-width: 100%;"></canvas>
-                            </div>
-                            <div class="relative h-72 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
-                                <canvas id="chartB" class="h-full w-full" style="max-width: 100%;"></canvas>
-                            </div>
-                        </div>
+	                        <div id="chartsGrid" class="grid gap-4 md:grid-cols-2">
+		                            <div id="chartAWrap" class="relative flex h-80 w-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
+		                                <div id="chartATitle" class="mb-2 text-xs font-semibold text-slate-200"></div>
+		                                <canvas id="chartA" class="w-full flex-1" style="max-width: 100%; min-height: 0;"></canvas>
+		                            </div>
+		                            <div id="chartBWrap" class="relative flex h-80 w-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-3">
+		                                <div id="chartBTitle" class="mb-2 text-xs font-semibold text-slate-200"></div>
+		                                <canvas id="chartB" class="w-full flex-1" style="max-width: 100%; min-height: 0;"></canvas>
+		                            </div>
+	                        </div>
                     </div>
                     <div>
                         <div class="mb-2 text-sm font-semibold text-slate-200">Détails</div>
@@ -125,11 +127,16 @@
         const progressWrap = document.getElementById('progressWrap');
         const progressBar = document.getElementById('progressBar');
         const progressPct = document.getElementById('progressPct');
-        const progressMsg = document.getElementById('progressMsg');
-        const resultTitleEl = document.getElementById('resultTitle');
-        const resultDescEl = document.getElementById('resultDesc');
-        const detailsEl = document.getElementById('details');
-        const exportsEl = document.getElementById('exports');
+	        const progressMsg = document.getElementById('progressMsg');
+	        const resultTitleEl = document.getElementById('resultTitle');
+		        const resultDescEl = document.getElementById('resultDesc');
+		        const chartATitleEl = document.getElementById('chartATitle');
+		        const chartBTitleEl = document.getElementById('chartBTitle');
+		        const chartsGridEl = document.getElementById('chartsGrid');
+		        const chartAWrapEl = document.getElementById('chartAWrap');
+		        const chartBWrapEl = document.getElementById('chartBWrap');
+		        const detailsEl = document.getElementById('details');
+		        const exportsEl = document.getElementById('exports');
 
         let chartA = null;
         let chartB = null;
@@ -165,8 +172,13 @@
             if (chartA) { chartA.destroy(); chartA = null; }
             if (chartB) { chartB.destroy(); chartB = null; }
             if (source) { source.close(); source = null; }
-            progressWrap.classList.add('hidden');
-        }
+		            progressWrap.classList.add('hidden');
+		            if (chartATitleEl) chartATitleEl.textContent = '';
+		            if (chartBTitleEl) chartBTitleEl.textContent = '';
+		            if (chartsGridEl) chartsGridEl.className = 'grid gap-4 md:grid-cols-2';
+		            if (chartAWrapEl) chartAWrapEl.classList.remove('max-w-5xl');
+		            if (chartBWrapEl) chartBWrapEl.classList.remove('max-w-5xl');
+		        }
 
         async function postJson(url, body) {
             const res = await fetch(url, {
@@ -220,19 +232,35 @@
         }
 
         function renderDrivers(payload) {
-            exportsEl.innerHTML = linkExport('cache_drivers');
+	            exportsEl.innerHTML = linkExport('cache_drivers');
+	            if (chartATitleEl) chartATitleEl.textContent = 'Temps par opération (avg ms)';
+	            if (chartBTitleEl) chartBTitleEl.textContent = 'Empreinte du cache (KB, store_kb)';
             resultTitleEl.textContent = 'Résultats : Cache Drivers';
             resultDescEl.textContent = 'Compare file/database/redis sur put/get(hit)/get(miss)/forget/remember/flush (ms). Le graphe de droite montre l’empreinte du cache (store_kb): file=taille fichier, database=LENGTH(value), redis=MEMORY USAGE.';
 
             const drivers = Object.keys(payload.results || {});
             const ops = ['put', 'get_hit', 'get_miss', 'forget', 'remember', 'flush'];
 
-            const rows = [['operation', ...drivers]];
-            for (const op of ops) {
-                const row = [op];
-                for (const d of drivers) row.push(payload.results?.[d]?.[op]?.avg ?? payload.results?.[d]?.error ?? 'n/a');
-                rows.push(row);
-            }
+	            const rows = [['metric', 'operation', ...drivers]];
+	            for (const op of ops) {
+	                const avgRow = ['avg_ms', op];
+	                const kbRow = ['store_kb', op];
+	                for (const d of drivers) {
+	                    avgRow.push(payload.results?.[d]?.[op]?.avg ?? payload.results?.[d]?.error ?? 'n/a');
+	                    kbRow.push(payload.results?.[d]?.[op]?.store_kb ?? payload.results?.[d]?.[op]?.memory_kb ?? payload.results?.[d]?.error ?? 'n/a');
+	                }
+	                rows.push(avgRow);
+	                rows.push(kbRow);
+	            }
+	            const extra = `
+	                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+	                    <div class="font-semibold text-slate-200">Note sur la mesure "memoire"</div>
+	                    <div class="mt-1 text-slate-400">
+	                        <div>• Ici, le graphe de droite montre surtout l’empreinte dans le store (<span class="font-mono">store_kb</span>) pour rendre la difference visible.</div>
+	                        <div>• Le payload stocke fait ~10KB; <span class="font-mono">remember</span> utilise des cles differentes a chaque iteration (donc l’empreinte augmente avec N).</div>
+	                    </div>
+	                </div>
+	            `;
             const explanation = `
                 <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
                     <div class="font-semibold text-slate-200">Ce qui est mesuré</div>
@@ -242,7 +270,7 @@
                     </div>
                 </div>
             `;
-            detailsEl.innerHTML = explanation + renderTable(rows);
+	            detailsEl.innerHTML = extra + explanation + renderTable(rows);
 
             const datasets = drivers.map((d, i) => ({
                 label: d,
@@ -284,52 +312,114 @@
         }
 
         function renderSql(payload) {
-            exportsEl.innerHTML = linkExport('sql_queries');
+	            exportsEl.innerHTML = linkExport('sql_queries');
+	            if (chartATitleEl) chartATitleEl.textContent = 'Latence (avg ms): direct vs cache hit';
+	            if (chartBTitleEl) chartBTitleEl.textContent = 'Speedup vs direct (x): direct / cached_hit';
             resultTitleEl.textContent = 'Résultats : SQL Queries';
             resultDescEl.textContent = 'Compare no-cache (direct) vs cache stores (file/database/redis) en miss/hit. Speedup (x) = direct / cached_hit.';
+	            if (chartsGridEl) chartsGridEl.className = 'grid gap-4 justify-items-center';
+	            if (chartAWrapEl) chartAWrapEl.classList.add('max-w-5xl');
+	            if (chartBWrapEl) chartBWrapEl.classList.add('max-w-5xl');
 
-            const variants = payload.results?.variants || {};
-            const names = Object.keys(variants);
-            const stores = payload.results?.cache_stores || ['file', 'database', 'redis'];
+	            const variants = payload.results?.variants || {};
+	            const names = Object.keys(variants);
+	            const stores = payload.results?.cache_stores || ['file', 'database', 'redis'];
+	            const requestedSize = payload?.config?.dataset_size ?? null;
+	            const dbCount = payload?.results?.db_article_count ?? null;
+	            const effectiveSize = payload?.results?.effective_dataset_size ?? null;
+	            const sizeInfo = (effectiveSize !== null && dbCount !== null)
+	                ? ('Dataset SQL: ' + effectiveSize + ' (DB: ' + dbCount + (requestedSize !== null ? ', demandé: ' + requestedSize : '') + ')')
+	                : null;
+	            resultDescEl.textContent = ('Compare no-cache (direct) vs Cache::store(file|database|redis)->remember() en miss/hit. ' + (sizeInfo ?? '')).trim();
 
-            const rows = [
-                ['variant', 'direct_avg_ms',
-                    ...stores.flatMap(s => [`${s}_hit_ms`, `${s}_speedup_x`]),
-                    ...stores.map(s => `${s}_miss_ms`),
-                ],
-            ];
+	            const rows = [
+	                [
+	                    'variant',
+	                    'direct_ms',
+	                    'direct_dbq',
+	                    ...stores.flatMap(s => [`${s}_hit_ms`, `${s}_hit_dbq`, `${s}_speedup_x`, `${s}_gain_%`, `${s}_miss_ms`, `${s}_miss_dbq`]),
+	                ],
+	            ];
 
-            for (const name of names) {
-                const direct = variants[name]?.direct?.avg ?? null;
+	            for (const name of names) {
+	                const direct = variants[name]?.direct?.avg ?? null;
+	                const directDbq = variants[name]?.direct?.db_queries ?? null;
 
-                const hitCells = stores.flatMap(s => {
-                    const hit = variants[name]?.stores?.[s]?.cached_hit?.avg ?? null;
-                    const speedup = (direct && hit) ? (direct / hit) : null;
-                    return [hit ?? 'n/a', speedup ? speedup.toFixed(2) : 'n/a'];
-                });
+	                const storeCells = stores.flatMap(s => {
+	                    const store = variants[name]?.stores?.[s] ?? null;
+	                    if (store?.error) {
+	                        return ['error', '', '', '', '', ''];
+	                    }
 
-                const missCells = stores.map(s => variants[name]?.stores?.[s]?.cached_miss?.avg ?? 'n/a');
+	                    const hit = store?.cached_hit?.avg ?? null;
+	                    const hitDbq = store?.cached_hit?.db_queries ?? null;
+	                    const miss = store?.cached_miss?.avg ?? null;
+	                    const missDbq = store?.cached_miss?.db_queries ?? null;
 
-                rows.push([name, direct ?? 'n/a', ...hitCells, ...missCells]);
-            }
+	                    const speedup = (direct && hit) ? (direct / hit) : null;
+	                    const gainPct = (direct && hit) ? ((direct - hit) / direct) * 100 : null;
 
-            const explanation = `
-                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
-                    <div class="font-semibold text-slate-200">Comment lire ce benchmark</div>
-                    <div class="mt-1 text-slate-400">
+	                    return [
+	                        hit ?? 'n/a',
+	                        hitDbq ?? '',
+	                        speedup ? speedup.toFixed(2) : 'n/a',
+	                        gainPct !== null ? gainPct.toFixed(1) : 'n/a',
+	                        miss ?? 'n/a',
+	                        missDbq ?? '',
+	                    ];
+	                });
+
+	                rows.push([name, direct ?? 'n/a', directDbq ?? '', ...storeCells]);
+	            }
+
+	            const speedupsByStore = Object.fromEntries(stores.map(s => [s, []]));
+	            for (const name of names) {
+	                const direct = variants[name]?.direct?.avg ?? null;
+	                for (const s of stores) {
+	                    const hit = variants[name]?.stores?.[s]?.cached_hit?.avg ?? null;
+	                    const v = (direct && hit) ? (direct / hit) : null;
+	                    if (v !== null) speedupsByStore[s].push(v);
+	                }
+	            }
+	            const speedupSummary = stores
+	                .map(s => {
+	                    const arr = speedupsByStore[s] || [];
+	                    if (!arr.length) return `${s}: n/a`;
+	                    const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+	                    return `${s}: ${avg.toFixed(2)}x`;
+	                })
+	                .join(' · ');
+
+	            const moreExplanation = `
+	                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+	                    <div class="font-semibold text-slate-200">Pourquoi ce benchmark est pedagogique</div>
+	                    <div class="mt-1 text-slate-400">
+	                        <div>• Chaque variant mesure la meme requete en 3 situations: <span class="font-mono">direct</span> (no-cache), <span class="font-mono">cached_miss</span> (1er remember()), <span class="font-mono">cached_hit</span> (cache rempli).</div>
+	                        <div>• On compare ensuite plusieurs stores: <span class="font-mono">file</span>, <span class="font-mono">database</span>, <span class="font-mono">redis</span>.</div>
+	                        <div>• <span class="font-mono">dbq</span> = nombre de requetes SQL executees sur la connexion DB (inclut aussi la table <span class="font-mono">cache</span> pour le store database).</div>
+	                        <div>• <span class="font-mono">speedup_x</span> = <span class="font-mono">direct_ms / hit_ms</span> (1 = egal, &gt;1 = plus rapide).</div>
+	                        <div class="mt-1">Moyenne des speedups (cached_hit) par store: <span class="font-mono">${speedupSummary}</span></div>
+	                    </div>
+	                </div>
+	            `;
+
+	            const explanation = `
+	                <div class="mb-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+	                    <div class="font-semibold text-slate-200">Comment lire ce benchmark</div>
+	                    <div class="mt-1 text-slate-400">
                         <div>• <span class="font-mono">direct</span> = requête SQL exécutée à chaque itération (baseline).</div>
                         <div>• <span class="font-mono">cached_miss</span> = 1er <span class="font-mono">remember()</span> (cache vide) → requête + écriture en cache.</div>
                         <div>• <span class="font-mono">cached_hit</span> = cache rempli → lecture depuis le store (file/database/redis), sans requête.</div>
                         <div>• <span class="font-mono">speedup_x</span> = <span class="font-mono">direct_avg_ms / cached_hit_ms</span> (plus grand = mieux).</div>
-                    </div>
-                </div>
-            `;
-            detailsEl.innerHTML = explanation + renderTable(rows);
+	                    </div>
+	                </div>
+	            `;
+	            detailsEl.innerHTML = moreExplanation + explanation + renderTable(rows);
 
-            const datasets = [
-                { label: 'direct', data: names.map(n => variants[n]?.direct?.avg ?? null) },
-                ...stores.map(s => ({ label: `${s}_hit`, data: names.map(n => variants[n]?.stores?.[s]?.cached_hit?.avg ?? null) })),
-            ];
+	            const datasets = [
+	                { label: 'direct (no-cache)', data: names.map(n => variants[n]?.direct?.avg ?? null) },
+	                ...stores.map(s => ({ label: `${s} (cached_hit)`, data: names.map(n => variants[n]?.stores?.[s]?.cached_hit?.avg ?? null) })),
+	            ];
 
             chartA = new Chart(document.getElementById('chartA'), {
                 type: 'bar',
@@ -345,13 +435,13 @@
                 }
             });
 
-            const speedupDatasets = stores.map(s => ({
-                label: `${s}_hit`,
-                data: names.map(n => {
-                    const direct = variants[n]?.direct?.avg ?? null;
-                    const hit = variants[n]?.stores?.[s]?.cached_hit?.avg ?? null;
-                    return (direct && hit) ? (direct / hit) : null;
-                }),
+	            const speedupDatasets = stores.map(s => ({
+	                label: `${s}`,
+	                data: names.map(n => {
+	                    const direct = variants[n]?.direct?.avg ?? null;
+	                    const hit = variants[n]?.stores?.[s]?.cached_hit?.avg ?? null;
+	                    return (direct && hit) ? (direct / hit) : null;
+	                }),
             }));
 
             chartB = new Chart(document.getElementById('chartB'), {
@@ -370,7 +460,9 @@
         }
 
         function renderFibonacci(payload) {
-            exportsEl.innerHTML = linkExport('fibonacci');
+	            exportsEl.innerHTML = linkExport('fibonacci');
+	            if (chartATitleEl) chartATitleEl.textContent = 'Temps (ms) par n';
+	            if (chartBTitleEl) chartBTitleEl.textContent = 'Nombre d’appels récursifs';
             resultTitleEl.textContent = 'Résultats : Fibonacci';
             resultDescEl.textContent = 'Compare naive (O(2^n)), memoized (O(n)), iterative (O(n)). Le graphe de droite montre le nombre d’appels récursifs.';
 
@@ -444,7 +536,9 @@
         }
 
         function renderDataSize(payload) {
-            exportsEl.innerHTML = linkExport('data_size');
+	            exportsEl.innerHTML = linkExport('data_size');
+	            if (chartATitleEl) chartATitleEl.textContent = 'Temps (avg ms): put/get par taille';
+	            if (chartBTitleEl) chartBTitleEl.textContent = 'Delta heap PHP (KB)';
             resultTitleEl.textContent = 'Résultats : Data Size';
             resultDescEl.textContent = 'Mesure put/get pour 1KB → 1MB sur le store choisi (ms + delta de heap PHP).';
 

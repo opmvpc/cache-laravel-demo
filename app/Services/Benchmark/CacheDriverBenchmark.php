@@ -24,6 +24,9 @@ class CacheDriverBenchmark
         $drivers = ['file', 'database', 'redis'];
         $operations = ['put', 'get_hit', 'get_miss', 'forget', 'remember', 'flush'];
 
+        // Use a non-trivial payload so store footprint (KB) is visible in charts.
+        $payloadValue = str_repeat('x', 10 * 1024); // ~10KB
+
         $results = [];
         $winners = [];
 
@@ -63,7 +66,7 @@ class CacheDriverBenchmark
                 $store->flush();
                 $keys = [$baseKey.'k'];
                 $put = $this->runner->run(
-                    operation: fn () => $store->put($baseKey.'k', 'value', 3600),
+                    operation: fn () => $store->put($baseKey.'k', $payloadValue, 3600),
                     iterations: $iterations,
                     onProgress: fn (int $opDone, int $opTotal) => $progress(0, 'put', $opDone, $opTotal),
                 )->toArray();
@@ -71,7 +74,7 @@ class CacheDriverBenchmark
 
                 // get_hit
                 $store->flush();
-                $store->put($baseKey.'hit', 'value', 3600);
+                $store->put($baseKey.'hit', $payloadValue, 3600);
                 $keys = [$baseKey.'hit'];
                 $getHit = $this->runner->run(
                     operation: fn () => $store->get($baseKey.'hit'),
@@ -94,9 +97,9 @@ class CacheDriverBenchmark
                 $store->flush();
                 $keys = [$baseKey.'forget'];
                 $forget = $this->runner->run(
-                    operation: function () use ($store, $baseKey) {
+                    operation: function () use ($store, $baseKey, $payloadValue) {
                         $key = $baseKey.'forget';
-                        $store->put($key, 'value', 3600);
+                        $store->put($key, $payloadValue, 3600);
                         $store->forget($key);
                     },
                     iterations: $iterations,
@@ -109,11 +112,11 @@ class CacheDriverBenchmark
                 $rememberKeys = [];
                 $i = 0;
                 $remember = $this->runner->run(
-                    operation: function () use ($store, $baseKey, &$rememberKeys, &$i) {
+                    operation: function () use ($store, $baseKey, $payloadValue, &$rememberKeys, &$i) {
                         $key = $baseKey.'remember:'.$i;
                         $rememberKeys[] = $key;
                         $i++;
-                        $store->remember($key, 3600, fn () => 'value');
+                        $store->remember($key, 3600, fn () => $payloadValue);
                     },
                     iterations: $iterations,
                     onProgress: fn (int $opDone, int $opTotal) => $progress(4, 'remember', $opDone, $opTotal),

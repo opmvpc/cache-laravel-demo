@@ -58,6 +58,7 @@ class SqlQueryBenchmark
         foreach ($variants as $name => $query) {
             $variantBase = $variantIndex * $perVariantSteps;
 
+            $directDbQueries = $this->countDbQueries(fn () => $query());
             $direct = $this->runner->run(
                 operation: fn () => $query(),
                 iterations: $iterations,
@@ -65,7 +66,9 @@ class SqlQueryBenchmark
             )->toArray();
 
             $results[$name] = [
-                'direct' => $direct,
+                'direct' => $direct + [
+                    'db_queries' => $directDbQueries,
+                ],
                 'stores' => [],
             ];
 
@@ -90,9 +93,17 @@ class SqlQueryBenchmark
                         onProgress: $this->progressAdapter($onProgress, $totalSteps, $storeBase + 1, $name, 'cached_hit', $storeName, $iterations),
                     )->toArray();
 
+                    $cachedHitDbQueries = $this->countDbQueries(fn () => $store->remember($cacheKey, 60, fn () => $query()));
+                    $this->flushStore($storeName, $store);
+                    $cachedMissDbQueries = $this->countDbQueries(fn () => $store->remember($cacheKey, 60, fn () => $query()));
+
                     $results[$name]['stores'][$storeName] = [
-                        'cached_miss' => $cachedMiss,
-                        'cached_hit' => $cachedHit,
+                        'cached_miss' => $cachedMiss + [
+                            'db_queries' => $cachedMissDbQueries,
+                        ],
+                        'cached_hit' => $cachedHit + [
+                            'db_queries' => $cachedHitDbQueries,
+                        ],
                     ];
 
                     $this->flushStore($storeName, $store);
@@ -113,6 +124,25 @@ class SqlQueryBenchmark
             'variants' => $results,
             'cache_stores' => $stores,
         ];
+    }
+
+    private function countDbQueries(callable $callback): int
+    {
+        try {
+            $connection = DB::connection();
+            $connection->flushQueryLog();
+            $connection->enableQueryLog();
+            try {
+                $callback();
+                $count = count($connection->getQueryLog());
+            } finally {
+                $connection->disableQueryLog();
+            }
+
+            return $count;
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     private function complexQuery(int $datasetSize, $idsSubquery)
